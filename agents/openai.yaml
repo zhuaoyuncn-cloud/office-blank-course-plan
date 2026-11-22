@@ -1,0 +1,6 @@
+interface:
+  display_name: "Office-blank course plan"
+  short_description: "汇总各班学期课表和集中实训备注，制作可核对的 Excel 空课表"
+  default_prompt: "用 $office-blank-course-plan 根据我发来的各班课表制作本学期的空课表。"
+policy:
+  allow_implicit_invocation: true
