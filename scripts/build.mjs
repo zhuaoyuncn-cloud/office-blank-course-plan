@@ -18,6 +18,24 @@ function hasText(value) {
   return typeof value === "string" && value.trim().length > 0;
 }
 
+const sampleMajors = ["机械", "机工", "智造", "成型", "机职贯", "型职贯"];
+const byClassName = new Intl.Collator("zh-Hans-CN-u-co-pinyin", { numeric: true });
+
+function classSortKey(name) {
+  const digits = "零一二三四五六七八九";
+  const label = name.normalize("NFKC").replace(/\s+/gu, "").replace(
+    /([一二三四五六七八九]?十[一二三四五六七八九]?|[一二三四五六七八九])(?=班$)/u,
+    (_, number) => {
+      const [tens, ones] = number.split("十");
+      if (ones === undefined) return String(digits.indexOf(tens));
+      return String((tens ? digits.indexOf(tens) : 1) * 10 + (ones ? digits.indexOf(ones) : 0));
+    },
+  );
+  const major = label.split(/\d/u, 1)[0];
+  const index = sampleMajors.indexOf(major);
+  return { rank: index < 0 ? sampleMajors.length : index, label };
+}
+
 function indices(selection, count, field) {
   if (selection === "all") return Array.from({ length: count }, (_, i) => i);
   requireValue(Array.isArray(selection) && selection.length &&
@@ -56,19 +74,27 @@ function ranges(numbers) {
 }
 
 function build(data) {
-  const { term, grade, classes, periods = defaultPeriods, endWeek = 18 } = data;
+  const { term, grade, classes, periods = defaultPeriods, endWeek = 18, classOrder = "auto" } = data;
   requireValue(hasText(term) && hasText(grade), "缺少年级或学期");
   requireValue(Number.isInteger(endWeek) && endWeek >= 1 && endWeek <= 18, "末周应在 1–18 之间");
   requireValue(Array.isArray(periods) && periods.length && periods.every(hasText), "缺少有效大节名称");
   requireValue(Array.isArray(classes) && classes.length, "缺少班级");
+  requireValue(classOrder === "auto" || classOrder === "input", "班级顺序应为 auto 或 input");
   const weeks = Array.from({ length: endWeek }, (_, i) => i + 1);
   const lines = periods.map(() => days.map(() => []));
   const audit = [["班级", "节次", "星期", "有课周次", "无课周次（空课表所填）"]];
   const names = new Set();
+  const ordered = classes.map(item => {
+    requireValue(hasText(item?.name) && !names.has(item.name.trim()), "班名缺失或重复 " + item?.name);
+    names.add(item.name.trim());
+    return { item, ...classSortKey(item.name) };
+  });
+  if (classOrder === "auto") {
+    ordered.sort((a, b) => a.rank - b.rank || byClassName.compare(a.label, b.label) ||
+      a.item.name.localeCompare(b.item.name, "zh-CN"));
+  }
   let dayWidth = 155;
-  for (const { name, complete, entries } of classes) {
-    requireValue(hasText(name) && !names.has(name.trim()), "班名缺失或重复 " + name);
-    names.add(name.trim());
+  for (const { item: { name, complete, entries } } of ordered) {
     requireValue(complete === true && Array.isArray(entries), name + " 的课表或备注尚未核全");
     const busy = periods.map(() => days.map(() => new Set()));
     for (const [i, entry] of entries.entries()) {
